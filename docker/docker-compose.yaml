@@ -1,0 +1,18 @@
+# only used build images
+
+services:
+
+  bitcoind-v28.0:
+    image: bitlightlabs/bitcoind:v28.0
+    build:
+      context: bitcoind/28.0
+
+  bitcoind-v27.0:
+    image: bitlightlabs/bitcoind:v27.0
+    build:
+      context: bitcoind/27.0
+
+  esplora-api-rln-v0.3.0:
+    image: bitlightlabs/esplora-api-rln:v0.3.0
+    build:
+      context: esplora-api-rln/0.3.0

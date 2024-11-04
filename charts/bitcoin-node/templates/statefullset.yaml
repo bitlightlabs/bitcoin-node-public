@@ -1,0 +1,191 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "bitcoin-node.fullname" . }}
+  labels:
+    {{- include "bitcoin-node.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "bitcoin-node.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "bitcoin-node.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "bitcoin-node.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        {{- if eq .Values.network "regtest" }}
+        - name: {{ .Chart.Name }}-regtest-auto-minting
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "bitcoin-node.bitcoinCoreImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                bitcoin-cli -regtest getblockchaininfo && break
+                sleep 1
+              done
+
+              blocks=$(bitcoin-cli -regtest getblockcount)
+              echo "Current block count: $blocks"
+
+              if [ $blocks -lt 400 ]; then
+                bitcoin-cli -regtest generatetoaddress 400 $MINT_ADDRESS
+              fi
+
+              while true; do
+                bitcoin-cli -regtest generatetoaddress 1 $MINT_ADDRESS
+                echo "Minted a block, wait $MINT_INTERVAL seconds"
+                sleep $MINT_INTERVAL
+              done
+          env:
+            - name: MINT_ADDRESS
+              value: {{ .Values.bitcoind.mintAddress }}
+            - name: MINT_INTERVAL
+              value: {{ .Values.bitcoind.mintInterval | quote }}
+          ports:
+            - name: rpc
+              containerPort: {{ include "bitcoin-node.rpcPort" . }}
+              protocol: TCP
+            - name: zmqpubrawblock
+              containerPort: {{ .Values.bitcoind.service.port.zmqpubrawblock }}
+              protocol: TCP
+            - name: zmqpubrawtx
+              containerPort: {{ .Values.bitcoind.service.port.zmqpubrawtx }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.bitcoind.resources | nindent 12 }}
+          volumeMounts:
+            - name: bitcoind-data
+              mountPath: /data/.bitcoin
+              subPath: .bitcoin
+            - name: bitcoin-node-config
+              mountPath: /data/.bitcoin/bitcoin.conf
+              subPath: bitcoind.conf
+            - name: bitcoind-data
+              mountPath: /data/esplora
+              subPath: esplora-db
+          {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        - name: {{ .Chart.Name }}-bitcoind
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "bitcoin-node.bitcoinCoreImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: rpc
+              containerPort: {{ include "bitcoin-node.rpcPort" . }}
+              protocol: TCP
+            - name: zmqpubrawblock
+              containerPort: {{ .Values.bitcoind.service.port.zmqpubrawblock }}
+              protocol: TCP
+            - name: zmqpubrawtx
+              containerPort: {{ .Values.bitcoind.service.port.zmqpubrawtx }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.bitcoind.resources | nindent 12 }}
+          volumeMounts:
+            - name: bitcoind-data
+              mountPath: /data/.bitcoin
+              subPath: .bitcoin
+            - name: bitcoin-node-config
+              mountPath: /data/.bitcoin/bitcoin.conf
+              subPath: bitcoind.conf
+            - name: bitcoind-data
+              mountPath: /data/esplora
+              subPath: esplora-db
+          {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        - name: {{ .Chart.Name }}-esplora
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "bitcoin-node.esploraImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                electrs -vvvv \
+                --network {{ .Values.network }} \
+                --daemon-dir /data/.bitcoin \
+                --daemon-rpc-addr "127.0.0.1:{{ include "bitcoin-node.rpcPort" .}}" \
+                --cors "*" \
+                --cookie "{{ .Values.bitcoind.rpcUser }}:{{ .Values.bitcoind.rpcPassword }}" \
+                --http-addr "0.0.0.0:{{ .Values.esplora.service.port.esploraHttp }}" \
+                --electrum-rpc-addr "0.0.0.0:{{ .Values.esplora.service.port.electrumRpc }}"
+
+                echo "Electrs exited, restarting in 5 seconds"
+                sleep 5
+              done
+          ports:
+            - name: esplora-http
+              containerPort: {{ .Values.esplora.service.port.esploraHttp }}
+              protocol: TCP
+            - name: electrum-rpc
+              containerPort: {{ .Values.esplora.service.port.electrumRpc }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.bitcoind.resources | nindent 12 }}
+          volumeMounts:
+            - name: bitcoind-data
+              mountPath: /data/.bitcoin
+              subPath: .bitcoin
+            - name: bitcoind-data
+              mountPath: /srv/explorer/db
+              subPath: esplora-db
+            - name: bitcoin-node-config
+              mountPath: /data/.bitcoin/bitcoin.conf
+              subPath: bitcoind.conf
+      volumes:
+      - name: bitcoin-node-config
+        configMap:
+          name: {{ include "bitcoin-node.fullname" . }}
+      {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: bitcoind-data
+        labels:
+          {{- include "bitcoin-node.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ .Values.bitcoind.data.size }}

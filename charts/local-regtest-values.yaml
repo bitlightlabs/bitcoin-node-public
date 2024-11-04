@@ -1,0 +1,14 @@
+network: regtest
+bitcoind:
+  mintInterval: 10
+  mintAddress: "bcrt1pn0s2pajhsw38fnpgcj79w3kr3c0r89y3xyekjt8qaudje70g4shs20nwfx"
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: regtest.bitcoin-node.local
+      paths:
+        - path: /
+          pathType: Prefix

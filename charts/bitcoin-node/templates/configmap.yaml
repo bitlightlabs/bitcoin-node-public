@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bitcoin-node.fullname" . }}
+  labels:
+    {{- include "bitcoin-node.labels" . | nindent 4 }}
+    checksum/bitcoind.conf: {{ include "bitcoin-node.bitcoinCoreConfig" . | sha256sum }}
+data:
+  bitcoind.conf: |
+    {{ include "bitcoin-node.bitcoinCoreConfig" . | nindent 4 }}

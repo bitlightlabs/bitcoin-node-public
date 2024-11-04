@@ -1,0 +1,19 @@
+Bitcoin Core Config:
+```
+{{ include "bitcoin-node.bitcoinCoreConfig" . | nindent 4 }}
+```
+
+Bitcoin Network: {{ .Values.network }}
+Bitcoin Core Image: {{ include "bitcoin-node.bitcoinCoreImage" . }}
+Esplora Image: {{ include "bitcoin-node.esploraImage" . }}
+
+
+Get the Bitcoin Core configuration file:
+```
+kubectl get -n {{ .Release.Name }} configmap {{ include "bitcoin-node.fullname" . }} -o json  | jq '.data.["bitcoind.conf"]' -r
+```
+
+Get the Node Port:
+```
+kubectl get -n {{ .Release.Name }} service {{ include "bitcoin-node.fullname" . }} -o json  | jq '.spec.ports'
+```

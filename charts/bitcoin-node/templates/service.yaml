@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitcoin-node.fullname" . }}
+  labels:
+    {{- include "bitcoin-node.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - port: {{ include "bitcoin-node.rpcPort" .}}
+      targetPort: rpc
+      protocol: TCP
+      name: rpc
+    - port: {{ .Values.bitcoind.service.port.zmqpubrawblock }}
+      targetPort: zmqpubrawblock
+      protocol: TCP
+      name: zmqpubrawblock
+    - port: {{ .Values.bitcoind.service.port.zmqpubrawtx }}
+      targetPort: zmqpubrawtx
+      protocol: TCP
+      name: zmqpubrawtx
+    - port: {{ .Values.esplora.service.port.electrumRpc }}
+      targetPort: electrum-rpc
+      protocol: TCP
+      name: electrum-rpc
+    - port: {{ .Values.esplora.service.port.esploraHttp }}
+      targetPort: esplora-http
+      protocol: TCP
+      name: esplora-http
+  selector:
+    {{- include "bitcoin-node.selectorLabels" . | nindent 4 }}
